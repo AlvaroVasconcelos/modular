@@ -1,5 +1,76 @@
-## [0.3.4] - 24 Jan 2020
+## [0.5.2] - 20 Feb 2020
+* Prevent StackOverflow
 
+## [0.5.1] - 15 Feb 2020
+* fix #52
+
+## [0.5.0] - 13 Feb 2020
+
+* Added router generic type
+```dart
+ @override
+  List<Router> get routers => [
+    //type router with return type
+    Router<String>('/event', child: (_, args) => EventPage()),
+  ]
+```
+Now you can type your pushNamed and pop
+
+```dart
+ String value = await Modular.to.pushNamed<String>();
+ //and
+ Modular.to.pop('My String');
+```
+
+## [0.4.7] - 9 Feb 2020
+
+* Added Custom Transition.
+* Added **Modular.args** (get route params in Controller).
+* (PREVIEW) RouterGuard in child routes.
+* Fix error in WidgetTests
+* Added Print routers in debugMode
+
+## [0.4.5] - 7 Feb 2020
+
+* Added not lazy Objects
+```dart
+@override
+  List<Bind> get binds => [
+        Bind((i) => OtherWidgetNotLazy(), lazy: false),
+      ];
+```
+
+## [0.4.4] - 6 Feb 2020
+
+* fix RouterGuards
+* Added Modular.debugMode = false;
+* Improve documentations
+* Fix Error in initalRoute
+
+## [0.4.3] - 1 Feb 2020
+
+* fix RouterGuards
+* Added Modular.debugMode = false;
+
+## [0.4.2] - 1 Feb 2020
+
+* fix routerGuards
+* fix tests
+
+## [0.4.1] - 30 Jan 2020
+
+* Internal Inject Interface reference
+
+
+## [0.4.0] - 28 Jan 2020
+* added Modular.dispose();
+* ModularState
+* Removed InjectMixin
+
+
+## [0.3.5+1] - 26 Jan 2020
+
+* fix module widget
 * fix inject error
 
 

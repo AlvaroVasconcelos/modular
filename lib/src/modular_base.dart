@@ -7,12 +7,21 @@ import 'interfaces/child_module.dart';
 import 'interfaces/route_guard.dart';
 import 'transitions/transitions.dart';
 
+_debugPrintModular(String text) {
+  if (Modular.debugMode) {
+    debugPrint(text);
+  }
+}
+
 class Modular {
   static String get initialRoute => '/';
+  static bool debugMode = true;
 
   static Map<String, ChildModule> _injectMap = {};
   static ChildModule _initialModule;
   static GlobalKey<NavigatorState> _navigatorKey;
+  static ModularArguments _args;
+  static ModularArguments get args => _args?.copy();
 
   static GlobalKey<NavigatorState> get navigatorKey {
     if (_navigatorKey == null) {
@@ -24,7 +33,59 @@ class Modular {
 
   static init(ChildModule module) {
     _initialModule = module;
+    if (Modular.debugMode) {
+      _printRouters();
+    }
     bindModule(module, "global==");
+  }
+
+  static _printRouters() {
+    List<Type> typesCheckds = [];
+    List<String> paths = [];
+    _printRoutersModule(_initialModule, '/', paths, typesCheckds);
+    paths.sort((preview, actual) => preview
+        .split(' => ')[0]
+        .length
+        .compareTo(actual.split(' => ')[0].length));
+    int sizedPath = paths[paths.length - 1].split(' => ')[0].length;
+    paths = paths.map((p) {
+      List<String> split = p.split(' => ');
+      int sizeLocalPath = split[0].length;
+      if (sizedPath >= sizeLocalPath) {
+        String spaces =
+            List.generate(sizedPath - sizeLocalPath, (index) => ' ').join('');
+        String path = split[0];
+        if (path != '/' && path[path.length - 1] == '/') {
+          path = path.substring(0, path.length - 1);
+        }
+        return "$path$spaces => ${split[1]}";
+      }
+      return p;
+    }).toList();
+
+    debugPrint('\n*** Modular Routers ***\n');
+    paths.forEach(print);
+    debugPrint("\n*****\n");
+  }
+
+  static _printRoutersModule(ChildModule module, String initialPath,
+      List<String> paths, List<Type> typesCheckds) {
+    typesCheckds.add(module.runtimeType);
+    for (var router in module.routers.where((router) => router.child != null)) {
+      String page = router.child.runtimeType
+          .toString()
+          .replaceFirst('(BuildContext, ModularArguments) => ', '');
+      String path = "$initialPath${router.routerName}".replaceFirst('//', '/');
+      paths.add('$path => $page');
+    }
+
+    bool _condition(router) => (router.module != null &&
+        !typesCheckds.contains(router.module.runtimeType));
+
+    for (var router in module.routers.where(_condition)) {
+      _printRoutersModule(
+          router.module, router.routerName, paths, typesCheckds);
+    }
   }
 
   static NavigatorState get to {
@@ -47,31 +108,36 @@ class Modular {
     if (!_injectMap.containsKey(name)) {
       module.paths.add(path);
       _injectMap[name] = module;
-      print("-- ${module.runtimeType.toString()} INITIALIZED");
+      module.instance();
+      _debugPrintModular("-- ${module.runtimeType.toString()} INITIALIZED");
     } else {
       _injectMap[name].paths.add(path);
     }
   }
 
-  static void removeModule(ChildModule module) {
-    String name = module.runtimeType.toString();
+  static void removeModule(ChildModule module, [String name]) {
+    name ??= module.runtimeType.toString();
     if (_injectMap.containsKey(name)) {
       _injectMap[name].cleanInjects();
       _injectMap.remove(name);
     }
   }
 
-  static B get<B>({Map<String, dynamic> params, Type module}) {
+  static B get<B>(
+      {Map<String, dynamic> params, String module, List<Type> typesInRequest}) {
     if (B.toString() == 'dynamic') {
       throw ModularError('not allow for dynamic values');
     }
 
+    typesInRequest ??= [];
+
     if (module != null) {
-      return getInjectableObject(module.toString(), params: params);
+      return _getInjectableObject<B>(module,
+          params: params, typesInRequest: typesInRequest);
     } else {
       for (var key in _injectMap.keys) {
-        B value =
-            getInjectableObject<B>(key, params: params, disableError: true);
+        B value = _getInjectableObject<B>(key,
+            params: params, disableError: true, typesInRequest: typesInRequest);
         if (value != null) {
           return value;
         }
@@ -80,13 +146,14 @@ class Modular {
     }
   }
 
-  static B getInjectableObject<B>(
-    String tag, {
-    Map<String, dynamic> params,
-    bool disableError = false,
-  }) {
+  static B _getInjectableObject<B>(String tag,
+      {Map<String, dynamic> params,
+      bool disableError = false,
+      List<Type> typesInRequest}) {
     B value;
-    if (_injectMap.containsKey(tag)) value = _injectMap[tag].getBind<B>(params);
+    if (_injectMap.containsKey(tag))
+      value =
+          _injectMap[tag].getBind<B>(params, typesInRequest: typesInRequest);
     if (value == null && !disableError) {
       throw ModularError('${B.toString()} not found in module $tag');
     }
@@ -94,8 +161,24 @@ class Modular {
     return value;
   }
 
-  static T removeInjectableObject<T>(String tag) {
-    return _injectMap[tag].remove<T>();
+  static void dispose<B>([String module]) {
+    if (B.toString() == 'dynamic') {
+      throw ModularError('not allow for dynamic values');
+    }
+
+    if (module != null) {
+      _removeInjectableObject(module);
+    } else {
+      for (var key in _injectMap.keys) {
+        if (_removeInjectableObject<B>(key)) {
+          break;
+        }
+      }
+    }
+  }
+
+  static bool _removeInjectableObject<B>(String tag) {
+    return _injectMap[tag].remove<B>();
   }
 
   @visibleForTesting
@@ -163,13 +246,30 @@ class Modular {
     return routeNamed == path;
   }
 
+  static RouteGuard _verifyGuard(List<RouteGuard> guards, String path) {
+    RouteGuard guard;
+    try {
+      guard = guards.length == 0
+          ? null
+          : guards.firstWhere((guard) => !guard.canActivate(path),
+              orElse: null);
+    } catch (e) {}
+
+    return guard;
+  }
+
   static List<RouteGuard> _masterRouteGuards;
 
   static Router _searchInModule(
       ChildModule module, String routerName, String path) {
     path = "/$path".replaceAll('//', '/');
-
-    for (var route in module.routers) {
+    final routers = module.routers;
+    routers.sort((preview, actual) {
+      bool isContain =
+          preview.routerName.contains('/:') == actual.routerName.contains('/:');
+      return isContain ? -1 : 1;
+    });
+    for (var route in routers) {
       String tempRouteName =
           (routerName + route.routerName).replaceFirst('//', '/');
       if (route.child == null) {
@@ -178,18 +278,29 @@ class Modular {
             (routerName + route.routerName + '/').replaceFirst('//', '/');
         Router router;
         if (_routerName == path || _routerName == "$path/") {
+          RouteGuard guard = _verifyGuard(route.guards, path);
+          if (guard != null) {
+            return null;
+          }
           router = route.module.routers[0];
           if (router.module != null) {
             var _routerName =
                 (routerName + route.routerName).replaceFirst('//', '/');
             router = _searchInModule(route.module, _routerName, path);
           }
-        } else {          
+        } else {
           //router = _searchInModule(route.module, _routerName, path.substring(path.indexOf("/",1)));
           router = _searchInModule(route.module, _routerName, path);
         }
 
         if (router != null) {
+          if (_routerName == path || _routerName == "$path/") {
+            RouteGuard guard = _verifyGuard(router.guards, path);
+            if (guard != null) {
+              return null;
+            }
+          }
+
           if (router.transition == TransitionType.defaultTransition) {
             router = router.copyWith(
               transition: route.transition,
@@ -209,7 +320,10 @@ class Modular {
                 : guards.firstWhere((guard) => !guard.canActivate(path),
                     orElse: null);
           } catch (e) {}
-
+          if ((tempRouteName == path || tempRouteName == "$path/") &&
+              path != '/') {
+            guard = _verifyGuard(guards, path);
+          }
           return guard == null ? route : null;
         }
       }
@@ -243,108 +357,32 @@ class Modular {
     return MaterialPageRoute(builder: builder, settings: settings);
   }
 
-  static Map<
-      TransitionType,
-      PageRouteBuilder Function(
-    Widget Function(BuildContext, ModularArguments) builder,
-    ModularArguments args,
-    RouteSettings settings,
-  )> _transitions = {
-    TransitionType.fadeIn: fadeInTransition,
-    TransitionType.noTransition: noTransition,
-    TransitionType.rightToLeft: rightToLeft,
-    TransitionType.leftToRight: leftToRight,
-    TransitionType.upToDown: upToDown,
-    TransitionType.downToUp: downToUp,
-    TransitionType.scale: scale,
-    TransitionType.rotate: rotate,
-    TransitionType.size: size,
-    TransitionType.rightToLeftWithFade: rightToLeftWithFade,
-    TransitionType.leftToRightWithFade: leftToRightWithFade,
-  };
-
   static String actualRoute = '/';
   static RouteSettings globaSetting;
 
-  static Route generateRoute(
-    RouteSettings settings, {
-    Function(Widget Function(BuildContext) builder, RouteSettings settings)
-        pageRoute = _defaultPageRouter,
-  }) {
+  static Route<T> generateRoute<T>(RouteSettings settings) {
     String path = settings.name;
     Router router = selectRoute(path);
     if (router == null) {
       return null;
     }
     actualRoute = path;
-    ModularArguments args = ModularArguments(router.params, settings.arguments);
+    _args = ModularArguments(router.params, settings.arguments);
 
     if (settings.isInitialRoute) {
-      return _NoAnimationMaterialPageRoute(
-          settings: settings,
-          builder: (context) => router.child(context, args));
+      router = router.copyWith(transition: TransitionType.noTransition);
     }
 
-    if (router.transition == TransitionType.defaultTransition) {
-      var pageRouterGenerate = pageRoute(
-        (context) {
-          var actual = ModalRoute.of(context);
-          Widget page = _DisposableWidget(
-            child: router.child(context, args),
-            dispose: () {
-              final List<String> trash = [];
-              if (actual.isCurrent) {
-                return;
-              }
-              _injectMap.forEach((key, module) {
-                module.paths.remove(path);
-                if (module.paths.length == 0) {
-                  module.cleanInjects();
-                  trash.add(key);
-                  print("-- ${module.runtimeType.toString()} DISPOSED");
-                }
-              });
-
-              trash.forEach((key) {
-                _injectMap.remove(key);
-              });
-            },
-          );
-          return page;
-        },
-        settings,
-      );
-      return pageRouterGenerate;
-    }
-    var selectTransition = _transitions[router.transition];
-    return selectTransition((context, args) {
-      var actual = ModalRoute.of(context);
-      return _DisposableWidget(
-        child: router.child(context, args),
-        dispose: () {
-          final List<String> trash = [];
-          if (actual.isCurrent) {
-            return;
-          }
-          _injectMap.forEach((key, module) {
-            module.paths.remove(path);
-            if (module.paths.length == 0) {
-              module.cleanInjects();
-              trash.add(key);
-              print("-- ${module.runtimeType.toString()} DISPOSED");
-            }
-          });
-
-          trash.forEach((key) {
-            _injectMap.remove(key);
-          });
-        },
-      );
-    }, args, settings);
+    return router.getPageRoute(settings: settings, injectMap: _injectMap);
   }
 
   static void addCoreInit(ChildModule module) {
     var tagText = module.runtimeType.toString();
+    addCoreInitFromTag(module, tagText);
+  }
+
+  static void addCoreInitFromTag(ChildModule module, String tagText) {
+    module.instance();
     _injectMap[tagText] = module;
   }
 }
@@ -354,6 +392,10 @@ class ModularArguments {
   final dynamic data;
 
   ModularArguments(this.params, this.data);
+
+  ModularArguments copy() {
+    return ModularArguments(params, data);
+  }
 }
 
 class _NoAnimationMaterialPageRoute<T> extends MaterialPageRoute<T> {
@@ -372,32 +414,5 @@ class _NoAnimationMaterialPageRoute<T> extends MaterialPageRoute<T> {
   Widget buildTransitions(BuildContext context, Animation<double> animation,
       Animation<double> secondaryAnimation, Widget child) {
     return child;
-  }
-}
-
-class _DisposableWidget extends StatefulWidget {
-  final Function dispose;
-  final Widget child;
-
-  _DisposableWidget({
-    Key key,
-    this.dispose,
-    this.child,
-  }) : super(key: key);
-
-  @override
-  __DisposableWidgetState createState() => __DisposableWidgetState();
-}
-
-class __DisposableWidgetState extends State<_DisposableWidget> {
-  @override
-  void dispose() {
-    widget.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return widget.child;
   }
 }

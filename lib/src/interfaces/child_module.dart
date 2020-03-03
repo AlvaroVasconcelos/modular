@@ -3,42 +3,69 @@ import 'package:flutter_modular/flutter_modular.dart';
 import 'package:flutter_modular/src/routers/router.dart';
 
 abstract class ChildModule {
+  List<Bind> _binds;
   List<Bind> get binds;
   List<Router> get routers;
 
+  ChildModule() {
+    _binds = binds;
+  }
+
+  changeBinds(List<Bind> b) {
+    _binds = b;
+  }
+
   final List<String> paths = List<String>();
 
-  final Map<String, dynamic> _injectBinds = {};
+  final Map<Type, dynamic> _injectBinds = {};
 
-  getBind<T>([Map<String, dynamic> params]) {
-    String typeName = T.toString();
+  getBind<T>(Map<String, dynamic> params, {List<Type> typesInRequest}) {
     T _bind;
-    if (_injectBinds.containsKey(typeName)) {
-      _bind = _injectBinds[typeName];
+    Type type = _getInjectType<T>();
+    if (_injectBinds.containsKey(type)) {
+      _bind = _injectBinds[type];
       return _bind;
     }
 
-    Bind b = binds.firstWhere((b) => b.inject is T Function(Inject),
+    if (typesInRequest.contains(type)) {
+      throw ModularError('''
+Recursive calls detected. This can cause StackOverflow.
+Check the Binds of the ${this.runtimeType} module:
+***
+${typesInRequest.join('\n')}
+***
+      
+      ''');
+    } else {
+      typesInRequest.add(type);
+    }
+
+    Bind b = _binds.firstWhere((b) => b.inject is T Function(Inject),
         orElse: () => null);
     if (b == null) {
+      typesInRequest.remove(type);
       return null;
     }
     _bind = b.inject(Inject(
       params: params,
+      typesInRequest: typesInRequest,
       //     tag: this.runtimeType.toString(),
     ));
     if (b.singleton) {
-      _injectBinds[typeName] = _bind;
+      _injectBinds[type] = _bind;
     }
     return _bind;
   }
 
-  remove<T>() {
-    String typeName = T.toString();
-    if (_injectBinds.containsKey(typeName)) {
-      var inject = _injectBinds[typeName];
+  bool remove<T>() {
+    Type type = _getInjectType<T>();
+    if (_injectBinds.containsKey(type)) {
+      var inject = _injectBinds[type];
       _callDispose(inject);
-      _injectBinds.remove(typeName);
+      _injectBinds.remove(type);
+      return true;
+    } else {
+      return false;
     }
   }
 
@@ -57,10 +84,28 @@ abstract class ChildModule {
   }
 
   cleanInjects() {
-    for (String key in _injectBinds.keys) {
+    for (Type key in _injectBinds.keys) {
       var _bind = _injectBinds[key];
       _callDispose(_bind);
     }
     _injectBinds.clear();
+  }
+
+  Type _getInjectType<B>() {
+    for (Type key in _injectBinds.keys) {
+      if (key is B) {
+        return key;
+      }
+    }
+    return B;
+  }
+
+  void instance() {
+    _binds.forEach((bindElement) {
+      if (!bindElement.lazy) {
+        var b = bindElement.inject(Inject());
+        _injectBinds[b.runtimeType] = b;
+      }
+    });
   }
 }

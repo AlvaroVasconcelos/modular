@@ -6,11 +6,9 @@ import '../modular_base.dart';
 class Inject<T> {
   Map<String, dynamic> params = {};
   final String tag;
+  final List<Type> typesInRequest;
 
-  Inject({
-    this.params,
-    this.tag,
-  });
+  Inject({this.params, this.tag, this.typesInRequest});
 
   factory Inject.of() => Inject(tag: T.toString());
 
@@ -18,14 +16,23 @@ class Inject<T> {
   B get<B>([Map<String, dynamic> params]) {
     params ??= {};
     if (tag == null) {
-      return Modular.get<B>(params: params);
+      return Modular.get<B>(params: params, typesInRequest: typesInRequest);
     } else {
-      return Modular.getInjectableObject<B>(tag, params: params);
+      return Modular.get<B>(
+          module: tag, params: params, typesInRequest: typesInRequest);
     }
   }
 
+  ModularArguments get args {
+    return Modular.args;
+  }
+
   dispose<B>() {
-    return Modular.removeInjectableObject<B>(tag);
+    if (T.runtimeType.toString() == 'dynamic') {
+      return Modular.dispose<B>();
+    } else {
+      return Modular.dispose<B>(tag);
+    }
   }
 }
 
@@ -42,7 +49,7 @@ mixin InjectWidgetMixin<T extends ChildModule> on Widget
   final Inject<T> _inject = Inject<T>.of();
 
   S get<S>({Map<String, dynamic> params}) =>
-      Modular.get<S>(module: T, params: params);
+      Modular.get<S>(module: T.toString(), params: params);
 
   Widget consumer<S extends ChangeNotifier>({
     Widget Function(BuildContext context, S value) builder,

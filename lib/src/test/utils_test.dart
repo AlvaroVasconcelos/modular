@@ -2,33 +2,24 @@ import 'package:flutter/material.dart';
 
 import '../../flutter_modular.dart';
 
-class TestModule extends ChildModule {
-  final List<Bind> changeBinds;
-  final List<Router> changeRouters;
-
-  TestModule(this.changeBinds, this.changeRouters);
-
-  @override
-  List<Bind> get binds => changeBinds;
-
-  @override
-  List<Router> get routers => changeRouters;
-}
-
-void initModule(ChildModule module, {List<Bind> changeBinds}) {
-  // ChildModule changedModule = TestModule(changeBinds, module.routers);
-
-  for (var item in module.binds ?? []) {
+void initModule(ChildModule module,
+    {List<Bind> changeBinds, bool initialModule}) {
+  Modular.debugMode = false;
+  final list = module.binds;
+  for (var item in list ?? []) {
     var dep = (changeBinds ?? []).firstWhere((dep) {
-      return item.inject.runtimeType == dep.inject.runtimeType;
+      return item.runtimeType == dep.runtimeType;
     }, orElse: () => null);
     if (dep != null) {
-      module.binds.remove(dep);
-      module.binds.add(item);
+      list.remove(item);
+      list.add(dep);
+      module.changeBinds(list);
     }
   }
-
-  Modular.addCoreInit(module);
+  if (initialModule ?? false)
+    Modular.init(module);
+  else
+    Modular.bindModule(module);
 }
 
 void initModules(List<ChildModule> modules, {List<Bind> changeBinds}) {
@@ -38,5 +29,13 @@ void initModules(List<ChildModule> modules, {List<Bind> changeBinds}) {
 }
 
 Widget buildTestableWidget(Widget widget) {
-  return MediaQuery(data: MediaQueryData(), child: MaterialApp(home: widget));
+  return MediaQuery(
+    data: MediaQueryData(),
+    child: MaterialApp(
+      home: widget,
+      initialRoute: '/',
+      navigatorKey: Modular.navigatorKey,
+      onGenerateRoute: Modular.generateRoute,
+    ),
+  );
 }

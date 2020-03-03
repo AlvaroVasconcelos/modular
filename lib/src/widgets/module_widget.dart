@@ -1,32 +1,83 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 
-abstract class ModuleWidget extends StatelessWidget with ChildModule {
-  ModuleWidget() {
-    this.paths.add(this.runtimeType.toString());
+_debugPrintModular(String text) {
+  if (Modular.debugMode) {
+    debugPrint(text);
   }
+}
+
+abstract class ModuleWidget extends StatelessWidget implements ChildModule {
   @override
-  List<Router> get routers => null;
+  List<Bind> get binds;
 
   Widget get view;
+
+  final _FakeModule _fakeModule = _FakeModule();
+
+  ModuleWidget() {
+    _fakeModule.changeBinds(binds);
+  }
+
+  @override
+  changeBinds(List<Bind> b) {
+    _fakeModule.changeBinds(b);
+  }
+
+  @override
+  cleanInjects() {
+    _fakeModule.cleanInjects();
+  }
+
+  @override
+  getBind<T>(Map<String, dynamic> params, {List<Type> typesInRequest}) {
+    return _fakeModule.getBind<T>(params, typesInRequest: typesInRequest);
+  }
+
+  @override
+  List<String> get paths => [this.runtimeType.toString()];
+
+  @override
+  bool remove<T>() {
+    return _fakeModule.remove<T>();
+  }
+
+  @override
+  void instance() {
+    _fakeModule.instance();
+  }
+
+  @override
+  List<Router> get routers => null;
 
   @override
   Widget build(BuildContext context) {
     return _ModularProvider(
-      tagText: this.runtimeType.toString(),
       module: this,
       child: view,
     );
   }
 }
 
+class _FakeModule extends ChildModule {
+  final List<Bind> bindsInject;
+
+  _FakeModule({String path, this.bindsInject}) {
+    this.paths.add(this.runtimeType.toString());
+  }
+
+  @override
+  List<Bind> get binds => bindsInject;
+
+  @override
+  List<Router> get routers => null;
+}
+
 class _ModularProvider extends StatefulWidget {
   final ChildModule module;
   final Widget child;
-  final String tagText;
 
-  const _ModularProvider({Key key, this.module, this.tagText, this.child})
-      : super(key: key);
+  const _ModularProvider({Key key, this.module, this.child}) : super(key: key);
 
   @override
   __ModularProviderState createState() => __ModularProviderState();
@@ -37,7 +88,7 @@ class __ModularProviderState extends State<_ModularProvider> {
   void initState() {
     super.initState();
     Modular.addCoreInit(widget.module);
-    print("-- ${widget.module.runtimeType.toString()} INITIALIZED");
+    _debugPrintModular("-- ${widget.module.runtimeType} INITIALIZED");
   }
 
   @override
@@ -49,6 +100,6 @@ class __ModularProviderState extends State<_ModularProvider> {
   void dispose() {
     super.dispose();
     Modular.removeModule(widget.module);
-    print("-- ${widget.module.runtimeType.toString()} DISPOSED");
+    _debugPrintModular("-- ${widget.module.runtimeType} DISPOSED");
   }
 }

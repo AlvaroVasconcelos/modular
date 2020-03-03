@@ -1,23 +1,46 @@
-## Flutter Modular 
+![CI & Coverage](https://github.com/Flutterando/modular/workflows/CI/badge.svg) [![Coverage Status](https://coveralls.io/repos/github/Flutterando/modular/badge.svg?branch=master)](https://coveralls.io/github/Flutterando/modular?branch=master) 
+
+## Flutter Modular
 
 ![](https://raw.githubusercontent.com/Flutterando/modular/master/modular.png)
 
 *Read this in other languages: [English](README.md), [Brazilian Portuguese](README.pt-br.md).*
 
 
+
+- **[What is Flutter Modular?](#what-is-flutter-modular)**
+- **[Modular Structure](#modular-structure)**  
+- **[Modular Pillars](#modular-pillars)**  
+  - [Example](#example)
+- **[Getting started with Modular](#getting-started-with-modular)** 
+  - [Installation](#installation)
+  - [Using in a New Project](#using-in-a-new-project)
+  - [Adding Routes](#adding-routes)
+  - [Dynamic Routes](#dynamic-routes)
+  - [Route Guard](#route-guard)
+  - [Route Transition Animation](#route-transition-animation)
+  - [Flutter Web url Routes](#flutter-web-url-routes)
+  - [Dependency Injection](#dependency-injection)
+  - [Retrieving in view using injection](#retrieving-in-view-using-injection)
+
+- **[Using Modular widgets to retrieve your classes](#using-modular-widgets-to-retrieve-your-classes)**
+  
+  - [ModularState](#modularstate)
+  - [ModuleWidget](#modulewidget)
+  - [Consuming a ChangeNotifier Class](#consuming-a-changenotifier-class)
+  - [Creating Child Modules](#creating-child-modules)
+  - [Lazy Loading](#lazy-loading)
+  - [Unit Test](#unit-test)
+  - [DebugMode](#debugmode)
+
+- **[Roadmap](#roadmap)**
+- **[Features and bugs](#features-and-bugs)**
+
+
 ## What is Flutter Modular?
 
 When a project is getting bigger and more complex, we unfortunately end up joining a lot of archives in just one, it makes harder the code maintenance and reusability too. The Modular give us a bunch of adapted solutions for Flutter, such a dependency injection, routes controller and a "Disposable Singletons" System(When a code provider call automatically dispose and clear the injection).
 The Modular came up prepared for adapt to any state management approach to its smart injection system, managing the memory use of your application.
-
-## What is the difference between Modular Flutter and bloc_pattern;
-
-We learned a lot from bloc_pattern, and we understand that the community has a lot of preferences regarding State Management, so even for the sake of nomenclature, we decided to treat Modular as a natural evolution of bloc_pattern and from there implement the system of "Dynamic Routes" that will become very popular with Flutter Web. Named routes are the future of Flutter, and we are preparing for it.
-
-
-## Will bloc_pattern be deprecated?
-
-Nope! We will continue to support and improve it. Although the migration to Modular will be very simple as well.
 
 
 ## Modular Structure
@@ -60,7 +83,7 @@ dependencies:
 
 You need to do some initial setup.
 
-Create a file to be your main widget, thinking of configuring named routes within MaterialApp: (app_widget.dart)
+Create a file to be your main widget, thinking of configuring named routes within `MaterialApp`: (app_widget.dart)
 
 ```dart
 import 'package:flutter/material.dart';
@@ -133,7 +156,7 @@ class AppModule extends MainModule {
 }
 ```
 
-And to access the route use Navigator.pushNamed or Modular.to.pushNamed:
+And to access the route use `Navigator.pushNamed` or `Modular.to.pushNamed`:
 
 ```dart
 Navigator.pushNamed(context, '/login');
@@ -167,10 +190,30 @@ Modular.to.pushNamed('/product/1'); //args.params['id']) gonna be 1
 
 ```
 
+You can also pass an object using the "arguments" property in the navigation:
+
+```dart
+ 
+Navigator.pushNamed(context, '/product', arguments: ProductModel()); //args.data
+//or
+Modular.to.pushNamed('/product', arguments: ProductModel()); //args.data
+
+```
+getting on the route
+
+```dart
+
+ @override
+  List<Router> get routers => [
+      Router("/product", child: (_, args) => Product(model: args.data)),
+  ];
+
+```
+
 ## Route Guard
 
 We may protect our routes with middleware that will verify that the route is available within a given Route.
-First create a RouteGuard:
+First create a `RouteGuard`:
 ```dart
 class MyGuard implements RouteGuard {
   @override
@@ -211,6 +254,27 @@ Router("/product",
 
 If you use transition in a module, all routes in that module will inherit this transition animation.
 
+
+
+## Router generic types
+
+You may need to navigate to a specific page and request a return value in the `pop()`, You can type the Router object with the value of that return;
+
+```dart
+ @override
+  List<Router> get routers => [
+    //type router with return type
+    Router<String>('/event', child: (_, args) => EventPage()),
+  ]
+```
+Now you can type your pushNamed and pop
+
+```dart
+ String name = await Modular.to.pushNamed<String>();
+ //and
+ Modular.to.pop('Jacob Moura');
+```
+
 ## Flutter Web url Routes
 
 The Routing System also recognizes what is typed in the website url (flutter web) so what you type in the browser url will open in the app. We hope this makes it easier for Flutter Web sites to make SEO more unique.
@@ -222,7 +286,10 @@ https://flutter-website.com/#/product/1
 this will open the Product view and args.params ['id']) will be equal to 1.
 
 ## Dependency Injection
-You can inject any class into your module using getter 'binds', for example classes BLoC ou ChangeNotifier
+You can inject any class into your module using getter 'binds', for example classes BLoC, ChangeNotifier or Stores.
+
+Bind is responsible for configuring object injection.
+
 
 ```dart
 class AppModule extends MainModule {
@@ -247,7 +314,7 @@ class AppModule extends MainModule {
 }
 ```
 
-Let's assume that for example we want to retrieve AppBloc inside HomePage.
+Let's assume that for example we want to retrieve `AppBloc` inside `HomePage`.
 
 ```dart
 //code in bloc
@@ -266,7 +333,7 @@ class AppBloc extends Disposable {
 }
 ```
 
-Retrieving in view using injection. #
+## Retrieving in view using injection. 
 You have some ways to retrieve your injected classes.
 
 ```dart
@@ -282,50 +349,25 @@ class HomePage extends StatelessWidget {
   }
 }
 ```
-
-## ATTENTION: When retrieving a class using Inject's get () method, it first looks in the module that was requested, if not found, it looks in the main module. We will still talk about creating child modules in this documentation.
-
-## Using InjectMixin to Retrieve Your Classes #
-
-We will use Mixin in the view to retrieve injections more easily
+By default, objects in Bind are singletons and lazy.
+When Bind is lazy, the object will only be instantiated when it is called for the first time. You can use 'lazy:false' if you want your object to be instantiated immediately.
 
 ```dart
-class HomePage extends StatelessWidget  with InjectMixinBase<AppModule>{
-
-  @override
-  Widget build(BuildContext context) {
-
-    // with mixin you add the get method straight to your view.
-    AppBloc appBloc = get();
-
-    // another way to recover
-    final appBloc = get<AppBloc>();
-    // ...
- }
-}
+Bind((i) => OtherWidgetNotLazy(), lazy: false),
 ```
-
-### Using Modular widgets to retrieve your classes
-You can also use `ModularStatelessWidget` instead of the mixin `InjectMixinBase<AppModule>` for example you can write:
+If you do not want the injected object to have a single instance, just use 'singleton: false', this will cause your object to be instantiated every time it is called
 
 ```dart
-class MyWidget extends ModularStatelessWidget<HomeModule> {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text("Modular"),
-      ),
-      body: Center(
-        child: Text("${get<HomeBloc>().counter}"),
-      ),
-    );
-  }
-}
+Bind((i) => OtherWidgetNotLazy(), singleton: false),
 ```
-K
 
-Example with `StatefulWidget`:
+
+
+## Using Modular widgets to retrieve your classes
+
+
+### ModularState
+
 
 ```dart
 class MyWidget extends StatefulWidget {
@@ -333,23 +375,47 @@ class MyWidget extends StatefulWidget {
   _MyWidgetState createState() => _MyWidgetState();
 }
 
-class _MyWidgetState extends ModularState<MyWidget, HomeModule> {
+class _MyWidgetState extends ModularState<MyWidget, HomeController> {
+
+  //variable controller
+  //automatic dispose off HomeController
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text("Modular"),
       ),
-      body: Center(child: Text("${get<HomeBloc>().counter}"),),
+      body: Center(child: Text("${controller.counter}"),),
     );
   }
 }
 ```
 
+### ModuleWidget
+
+The same structure as `ChildModule`. Very useful for modular TabBar visualizations.
+
+```dart
+class TabModule extends ModuleWidget {
+
+    @override
+  List<Bind> get binds => [
+    Bind((i) => TabBloc(repository: i.get<TabRepository>())),
+    Bind((i) => TabRepository()),
+  ];
+
+  Widget get view => TabPage();
+
+}
+
+```
+
+
 ## Consuming a ChangeNotifier Class
 
 
-Example of a ChangeNotifier Class:
+Example of a `ChangeNotifier` Class:
 
 ```dart
 import 'package:flutter/material.dart';
@@ -364,7 +430,7 @@ class Counter extends ChangeNotifier {
 }
 ```
 
- you can use the Consumer to manage the state of a widget block.
+ you can use the `Consumer` to manage the state of a widget block.
 
 ```dart
 class HomePage extends StatelessWidget {
@@ -397,7 +463,7 @@ class HomePage extends StatelessWidget {
 
 ## Creating Child Modules.
 
-You can create other modules in your project, so instead of inheriting from MainModule, you should inherit from ChildModule.
+You can create other modules in your project, so instead of inheriting from `MainModule`, you should inherit from `ChildModule`.
 
 ```dart
 class HomeModule extends ChildModule {
@@ -431,11 +497,46 @@ class AppModule extends MainModule {
 //...
 ```
 
-Consider splitting your code into modules such as LoginModule, and into it placing routes related to that module. Maintaining and sharing code in another project will be much easier.
+Consider splitting your code into modules such as `LoginModule`, and into it placing routes related to that module. Maintaining and sharing code in another project will be much easier.
 
 ## Lazy Loading
 
-Another benefit you get when working with modules is to load them "lazily". This means that your dependency injection will only be available when you navigate to a module, and as you exit that module, Modular will wipe memory by removing all injections and executing the dispose () methods (if available) on each module. injected class refers to that module.
+Another benefit you get when working with modules is to load them "lazily". This means that your dependency injection will only be available when you navigate to a module, and as you exit that module, Modular will wipe memory by removing all injections and executing the dispose() methods (if available) on each module. injected class refers to that module.
+
+## Unit Test
+
+You can use the dependency injection system to replace Links from mock links,as an example of a repository. You can also do it using "Inversion of Control"
+
+```dart
+@override
+  List<Bind> get binds => [
+        Bind<ILocalStorage>((i) => LocalStorageSharePreferences()),
+      ];
+```
+
+We have to import the "flutter_modular_test" to use the methods that will assist with Injection in the test environment.
+
+```dart
+import 'package:flutter_modular/flutter_modular_test.dart';
+import 'package:flutter_test/flutter_test.dart';
+...
+
+main() {
+  test('change bind', () {
+    initModule(AppModule(), changeBinds: [
+      Bind<ILocalStorage>((i) => LocalMock()), 
+    ]);
+    expect(Modular.get<ILocalStorage>(), isA<LocalMock>());
+  });
+}
+```
+
+## DebugMode
+
+Remove prints debug:
+```dart
+Modular.debugMode = false;
+```
 
 ## Roadmap
 

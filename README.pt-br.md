@@ -5,19 +5,40 @@
 *Leia em outros idiomas: [Inglês](README.md), [Português](README.pt-br.md).*
 
 
+- **[O que é o Flutter Modular?](#o-que-é-o-flutter-modular)**
+- **[Estrutura Modular](#estrutura-modular)**  
+- **[Pilares do Modular](#pilares-do-modular)**  
+  - [Exemplos](#exemplos)
+- **[Começando com o Modular](#getting-started-with-modular)** 
+  - [Instalação](#instalação)
+  - [Usando em um novo projeto](#usando-em-um-novo-projeto)
+  - [Adicionando Rotas](#adicionando-rotas)
+  - [Rotas dinâmicas](#rotas-dinâmicas)
+  - [Proteção de Rotas](#proteção-de-rotas)
+  - [Animação para Transição de Rota](#animação-para-transição-de-rota)
+  - [Rotas na url com Flutter Web](#rotas-na-url-com-flutter-web)
+  - [Injeção de dependências](#injeção-de-dependências)
+  - [Recuperando na view usando injeção](#recuperando-na-view-usando-injeção)
+    
+
+- **[Usando Modular widgets para recuperar suas classes](#usando-Modular-widgets-para-recuperar-suas-classes)**
+  
+  - [ModularState](#modularstate)
+  - [ModuleWidget](#modulewidget)
+  - [Consumindo uma Classe ChangeNotifier](#consumindo-uma-classe-changenotifier)
+  - [Criando Módulos Filhos](#criando-módulos-filhos)
+  - [Lazy Loading](#lazy-loading)
+  - [Testes Unitários](#testes-unitários)
+  - [DebugMode](#debugmode)
+
+- **[Roadmap](#roadmap)**
+- **[Funcionalidades e Bugs](#funcionalidades-e-bugs)**
+
 ## O que é o Flutter Modular?
 
 Quando um projeto vai ficando grande e complexo, acabamos juntando muitos arquivos em um só lugar, isso dificulta a manutenção do código e também o reaproveitamento.
 O Modular nos trás várias soluções adaptadas para o Flutter como Injeção de Dependências, Controle de Rotas e o Sistema de "Singleton Descartáveis" que é quando o provedor do código se encarrega de "chamar" o dispose automaticamente e limpar a injeção (prática muito comum no package bloc_pattern).
 O Modular vem preparado para adaptar qualquer gerência de estado ao seu sistema de Injeção de Dependências inteligente, gerenciando a memória do seu aplicativo.
-
-## Qual a diferença entre o Flutter Modular e o bloc_pattern;
-
-Aprendemos muito com o bloc_pattern, e entendemos que a comunidade tem diversas preferências com relação a Gerência de Estado, então, até mesmo por uma questão de nomeclatura, decidimos tratar o Modular como uma evolução natural do bloc_pattern, e a partir daí implementar o sistema de Rotas Dinâmicas que ficará muito popular graças ao Flutter Web. Rotas nomeadas são o futuro do Flutter, e estamos nos preparando para isso.
-
-## O bloc_pattern será depreciado?
-
-Não! Continuaremos a dar suporte e melhora-lo. Apesar de que a migração para o Modular será muito simples também.
 
 ## Estrutura Modular
 
@@ -175,6 +196,26 @@ Modular.to.pushNamed('/product/1'); //args.params['id']) será 1
 
 ```
 
+Você também pode passar um objeto usando a propriedade "arguments" na navegação:
+
+```dart
+ 
+Navigator.pushNamed(context, '/product', arguments: ProductModel()); //args.data
+//or
+Modular.to.pushNamed('/product', arguments: ProductModel()); //args.data
+
+```
+recebendo na rota
+
+```dart
+
+ @override
+  List<Router> get routers => [
+      Router("/product", child: (_, args) => Product(model: args.data)),
+  ];
+
+```
+
 ## Proteção de Rotas
 
 Podemos proteger nossas rotas com middlewares que verificarão se a rota está disponível dentro de um determinado Route.
@@ -229,6 +270,25 @@ As rotas dinâmicas também se aplicam nesse caso.
 https://flutter-website.com/#/product/1
 ```
 Isso abrira a view Product e `args.params(['id'])` será igual a 1.
+
+## Router generic types
+
+Você pode precisar navegar para uma pagina especifica e solicitar um valor de retorno no pop(), Você pode tipar o objeto Router com o valor desse retorno;
+
+```dart
+ @override
+  List<Router> get routers => [
+    //type router with return type
+    Router<String>('/event', child: (_, args) => EventPage()),
+  ]
+```
+Agora você pode "tipar" o **pushNamed** e o **pop**
+
+```dart
+ String name = await Modular.to.pushNamed<String>();
+ //and
+ Modular.to.pop('Jacob Moura');
+```
 
 
 ## Injeção de dependências
@@ -294,48 +354,23 @@ class HomePage extends StatelessWidget {
 }
 ```
 
-ATENÇÂO: Quando recuperar uma classe usando o método get() do Inject, ele primeiro procurará no módulo que foi solicitado, se não encontrar, ele buscará no módulo principal. Ainda falaremos sobre a criação de módulos filhos nesta documentação.
-
-## Usando o InjectMixin para recuperar suas Classes
-
-Usaremos Mixin na view para recuperar as injeções de forma mais fácil.
+Por padrão, os objeto no Bind é singleton e lazy.
+Quando Bind é lazy, o objeto só será instanciado quando for chamado pela primeira vez. Você pode usar 'lazy:false' se desejar que seu objeto seja instanciado imediatamente.
 
 ```dart
-class HomePage extends StatelessWidget  with InjectMixinBase<AppModule>{
-
-  @override
-  Widget build(BuildContext context) {
-
-    //com mixin você adiciona o método get direto na sua view.
-    AppBloc appBloc = get();
-
-    //uma outra forma de recuperar
-    final appBloc = get<AppBloc>();
-    //...
-  }
-}
+Bind((i) => OtherWidgetNotLazy(), lazy: false),
 ```
-
-### Usando widgets do Modular para obter suas classes
-Você pode usar o widget `ModularStatelessWidget` ao invés do mixin `InjectMixinBase<AppModule>` para simplificar sua implementação:
+Se você não quiser que o objeto injetado tenha uma instancia única, basta usar 'singleton:false', isso fará com que seu objeto seja instanciado toda vez que for chamado
 
 ```dart
-class MyWidget extends ModularStatelessWidget<HomeModule> {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text("Modular"),
-      ),
-      body: Center(
-        child: Text("${get<HomeBloc>().counter}"),
-      ),
-    );
-  }
-}
+Bind((i) => OtherWidgetNotLazy(), singleton: false),
 ```
 
-Caso seu widget seja `StatefulWidget` seu estado deve extender de `ModularState<MyWidget, HomeModule>` para ter acesso ao `get` e `consumer` dentro dele:
+## Usando Modular widgets para recuperar suas classes
+
+
+### ModularState
+
 
 ```dart
 class MyWidget extends StatefulWidget {
@@ -343,17 +378,40 @@ class MyWidget extends StatefulWidget {
   _MyWidgetState createState() => _MyWidgetState();
 }
 
-class _MyWidgetState extends ModularState<MyWidget, HomeModule> {
+class _MyWidgetState extends ModularState<MyWidget, HomeController> {
+
+  //variable controller
+  //automatic dispose off HomeController
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text("Modular"),
       ),
-      body: Center(child: Text("${get<HomeBloc>().counter}"),),
+      body: Center(child: Text("${controller.counter}"),),
     );
   }
 }
+```
+
+### ModuleWidget
+
+A mesma estrutura de um MainModule/ChildModule. Muito útil para usar em uma TabBar com páginas modulares
+
+```dart
+class TabModule extends ModuleWidget {
+
+    @override
+  List<Bind> get binds => [
+    Bind((i) => TabBloc(repository: i.get<TabRepository>())),
+    Bind((i) => TabRepository()),
+  ];
+
+  Widget get view => TabPage();
+
+}
+
 ```
 
 ## Consumindo uma Classe ChangeNotifier
@@ -446,7 +504,41 @@ Pense em dividir seu código em módulos como por exemplo, `LoginModule`, e dent
 
 ## Lazy Loading
 
-Outro benefício que ganha ao trabalhar com módulos é carrega-los "preguiçosamente". Isso significa que sua injeção de dependência ficará disponível apenas quando você navegar para um módulo, e assim que sair dele, o Modular fará uma limpeza na memória removendo todas a injeções e executando os métodos de `dispose()` (se disponível) em cada classe injetada referênte a aquele módulo.
+Outro benefício que ganha ao trabalhar com módulos é carrega-los "preguiçosamente". Isso significa que sua injeção de dependência ficará disponível apenas quando você navegar para um módulo, e assim que sair dele, o Modular fará uma limpeza na memória removendo todas a injeções e executando os métodos de `dispose()` (se disponível) em cada classe injetada referênte aquele módulo).
+
+## Testes Unitários
+
+Você pode usar o sistema de injeção de dependências para substituir Binds por Binds de mocks, como por exemplo de um repositório. Você pode fazer também usando "Inversão de Controles"
+
+```dart
+@override
+  List<Bind> get binds => [
+        Bind<ILocalStorage>((i) => LocalStorageSharePreferences()),
+      ];
+```
+
+Temos que importar o "flutter_modular_test" para usar os métodos que auxiliarão com a Injeção no ambiente de testes.
+
+```dart
+import 'package:flutter_modular/flutter_modular_test.dart';
+import 'package:flutter_test/flutter_test.dart';
+...
+
+main() {
+  test('change bind', () {
+    initModule(AppModule(), changeBinds: [
+      Bind<ILocalStorage>((i) => LocalMock()), 
+    ]);
+    expect(Modular.get<ILocalStorage>(), isA<LocalMock>());
+  });
+}
+```
+## DebugMode
+
+Remova os prints de depuração:
+```dart
+Modular.debugMode = false;
+```
 
 ## Roadmap
 
