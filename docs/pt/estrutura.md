@@ -1,0 +1,3 @@
+## Estrutura Modular
+
+O Modular nos traz uma estrutura que permite gerenciar a injeção de dependencias e rotas em apenas um arquivo por módulo, permitindo organizar nossos arquivos a partir desta idéia. Quando todos as paginas, controllers, blocs (e etc..) estiverem em uma pasta e reconhecidos por esse arquivo principal, a isso damos o nome de módulo, pois nos propocionará fácil manutenabilidade e principalmente o desacoplamento TOTAL do código para reaproveitamento em outros projetos.
